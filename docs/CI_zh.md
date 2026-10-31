@@ -6,6 +6,19 @@
 
 > 新配置提交时不预先宣称流水线成功；请以 Actions 页面具体运行结果为准。构建通过也不代表微信隐藏功能已完成：当前 M1 的真实会话、通讯录、搜索与通知过滤尚未接入，真机兼容性和 ART 性能仍未验证。
 
+## 已验证的真实云构建
+
+[运行 #41240631747](https://github.com/libingtong/wechat-close-friends/actions/runs/41240631747) 对应提交 [`6d6d11618226bf2f3e33ed3d960353bf72881f05`](https://github.com/libingtong/wechat-close-friends/commit/6d6d11618226bf2f3e33ed3d960353bf72881f05)，真实结果为 **success**，用时 **1 分 22 秒**。
+
+- 两个 Artifact 均已下载复核，APK 签名、`zipalign` 与 `aapt` 包信息检查均退出 0。
+- 单元测试：28 项，0 失败、0 错误、0 跳过。
+- 云端 Lint：0 Error、8 Warning；相较此前本地的 7 Warning，新增 `OldTargetApi` 提示。
+- 调试 APK：41,293 字节，SHA-256 为 `29e1a146b8697fa40aabb8643a2a0127700bf3868c60f7f8243e11a6a5ce7d84`。
+
+此前首轮运行 `41240101355` 因 `sdkmanager` 未在 `PATH` 中退出 127；修复工具发现与自举流程后，才得到上述成功结果。失败记录不被抹去，后续提交也应以各自运行结果为准。
+
+这证明该提交能够在 GitHub 云端完成构建和产物检查，不证明微信真实过滤已接入、入口已通过真机验证或 ART 性能达标。产物仍是 Debug 调试包，不是正式 Release。
+
 ## 如何手动在线编译
 
 1. 打开仓库的 **Actions** 页面。
