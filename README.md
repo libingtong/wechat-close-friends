@@ -111,6 +111,14 @@ Wrapper 固定 Gradle 8.13，并启用分发包 SHA-256 校验。首次执行需
 
 调试 APK 不是正式发布版本，调试签名也不是发布签名。`local.properties`、构建缓存和签名私钥不应提交。
 
+## GitHub 在线编译
+
+仓库提供 **Android构建** 工作流：推送 / PR 到 `master` 自动检查，也可在 **Actions → Android构建 → Run workflow** 手动运行。构建成功后，在该次运行底部 **Artifacts** 下载调试 APK、SHA-256 与构建信息的 ZIP；下载可能需要登录 GitHub，产物保留 14 天。
+
+流水线会运行单元测试、Lint、Debug 构建，以及 APK 签名和对齐检查，不连接手机或账号，不把共享 Runner 的微基准当作性能门槛。**工作流配置不等于远端运行已成功，请以具体运行结果为准。** 当前不自动发布 Release，也不承诺正式签名或永久 APK 直链。
+
+调试签名可能随 Runner 运行改变，不能保证覆盖安装上一调试版本；请勿为此卸载日常微信。操作步骤、产物说明与安全边界见 [在线编译指南](docs/CI_zh.md)。
+
 ## 验证记录
 
 `0.1.0-dev` 的本轮本地验证结果：
@@ -137,6 +145,7 @@ docs/                计划、适配证据、性能契约与验证记录
 - [性能设计与测量边界](docs/PERFORMANCE_zh.md)
 - [设置入口与适配依据](docs/ENTRY_POINT_zh.md)
 - [构建、测试与交付验证](docs/VERIFICATION_zh.md)
+- [GitHub 在线编译与产物下载](docs/CI_zh.md)
 
 ## 开发路线
 

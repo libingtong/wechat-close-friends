@@ -1,0 +1,132 @@
+name: Android构建
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-build-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: 测试、检查与构建调试包
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: 检出源码 · checkout v7.0.1
+        id: checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      - name: 配置 JDK 17 · setup-java v6.1.0
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: 配置 Gradle 缓存与 Wrapper 校验 · setup-gradle v6.4.1
+        uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c
+        with:
+          cache-provider: basic
+          cache-read-only: ${{ github.event_name == 'pull_request' || github.ref != 'refs/heads/master' }}
+          validate-wrappers: true
+          dependency-graph: disabled
+
+      - name: 确认 Android SDK 固定组件
+        run: |
+          test -n "$ANDROID_HOME"
+          sdkmanager --sdk_root="$ANDROID_HOME" "platforms;android-36" "build-tools;36.0.0"
+          java -version
+          sh ./gradlew --version --no-daemon --console=plain
+
+      - name: 运行单元测试、Lint 与 Debug 构建
+        run: sh ./gradlew :core:test :app:lintDebug :app:assembleDebug --no-daemon --console=plain --stacktrace
+
+      - name: 核验签名与对齐并整理产物
+        env:
+          SOURCE_SHA: ${{ steps.checkout.outputs.commit }}
+        run: |
+          apk="app/build/outputs/apk/debug/app-debug.apk"
+          tools="$ANDROID_HOME/build-tools/36.0.0"
+          "$tools/apksigner" verify --verbose --print-certs "$apk"
+          "$tools/zipalign" -c -p 4 "$apk"
+          mkdir -p dist
+          cp "$apk" dist/wechat-close-friends-debug.apk
+          (
+            cd dist
+            sha256sum wechat-close-friends-debug.apk > SHA256SUMS.txt
+          )
+          {
+            printf '项目：微信密友 · InkVeil\n'
+            printf '源码提交：%s\n' "$SOURCE_SHA"
+            printf '运行地址：%s/%s/actions/runs/%s\n' "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID"
+            printf '运行序号：%s；重试次数：%s\n' "$GITHUB_RUN_NUMBER" "$GITHUB_RUN_ATTEMPT"
+            printf '构建时间（UTC）：%s\n' "$(date -u +%FT%TZ)"
+            printf '环境：ubuntu-24.04 / Temurin JDK 17 / Gradle 8.13 / AGP 8.13.0\n'
+            printf 'Android：minSdk 24 / targetSdk 36 / compileSdk 36 / Build Tools 36.0.0\n'
+            printf '版本：0.1.0-dev；包名：io.github.inkveil\n'
+            printf '类型：Debug 调试包，非正式发布；Runner 调试签名可能随运行改变。\n'
+            printf '边界：无设备、账号或 Root 参与构建；真机兼容未验证，真实微信过滤尚未接入。\n'
+          } > dist/BUILD_INFO.txt
+
+      - name: 上传调试 APK 与校验信息 · upload-artifact v7.0.2
+        id: apk
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: wechat-close-friends-debug-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            dist/wechat-close-friends-debug.apk
+            dist/SHA256SUMS.txt
+            dist/BUILD_INFO.txt
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: 始终保留测试与 Lint 报告 · upload-artifact v7.0.2
+        id: reports
+        if: ${{ always() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: android-reports-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            core/build/reports/tests/test/
+            core/build/test-results/test/
+            app/build/reports/lint-results-debug.*
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: 汇总构建结果与使用边界
+        if: ${{ always() }}
+        env:
+          BUILD_STATUS: ${{ job.status }}
+          SOURCE_SHA: ${{ steps.checkout.outputs.commit }}
+          APK_URL: ${{ steps.apk.outputs.artifact-url }}
+          REPORTS_URL: ${{ steps.reports.outputs.artifact-url }}
+        run: |
+          {
+            printf '## 微信密友 · Android 在线构建\n\n'
+            printf -- '- 当前状态：%s\n' "$BUILD_STATUS"
+            printf -- '- 源码提交：%s\n' "$SOURCE_SHA"
+            printf -- '- 环境：Ubuntu 24.04、Temurin JDK 17、Gradle Wrapper 8.13、AGP 8.13.0、SDK 36 / Build Tools 36.0.0。\n'
+            printf -- '- 检查：core 单元测试、Android Lint、Debug 构建、APK 签名与 zipalign。\n'
+            if [ -n "$APK_URL" ]; then
+              printf -- '- [下载调试包与 SHA-256 校验信息](%s)\n' "$APK_URL"
+            else
+              printf -- '- 本次没有成功上传可下载的调试包，请检查失败步骤。\n'
+            fi
+            if [ -n "$REPORTS_URL" ]; then
+              printf -- '- [下载测试与 Lint 报告](%s)\n' "$REPORTS_URL"
+            fi
+            printf '\n产物保留 14 天，下载可能需要登录 GitHub。Debug 签名不等于正式发布签名。\n\n'
+            printf '**没有设备、账号或 Root 参与；真实微信过滤尚未接入，真机兼容与 ART 性能未验证。**\n'
+          } >> "$GITHUB_STEP_SUMMARY"
