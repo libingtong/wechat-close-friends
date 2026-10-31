@@ -1,10 +1,10 @@
 # M1 验收记录
 
-日期：2026-10-31。工程和原参考对象未更换。结论仅覆盖代码、构建、规则测试、静态审阅及文件交付，不扩大为真机微信功能已通过。
+日期：2026-10-31。工程和原参考对象未更换。结论仅覆盖代码、构建、规则测试、静态审阅及文件交付，不扩大为真机微信功能已通过。本文记录首次本地验收；路径相对于仓库根目录，外部证据、参考 APK 和反编译材料不随公开源码分发，也不是正常构建的前提。
 
 ## 已观察结果
 
-- Git 仓库：`D:/tmp/apk/inkveil/.git`，已初始化；尚未提交，未修改全局 Git 配置。
+- Git 仓库：`.git/`。首次验收时已初始化、尚未提交；随后已按用户要求提交首版 `b34f9f8`，未修改全局 Git 配置。
 - 最终命令：`gradle :core:test :app:assembleDebug :app:lintDebug --no-daemon --console=plain`。
 - 工具链：已安装的 Gradle 8.13 / JDK 17 / AGP 8.13.0。
 - 逐字末尾：`BUILD SUCCESSFUL in 55s`；`49 actionable tasks: 10 executed, 1 from cache, 38 up-to-date`；退出 0。
@@ -39,12 +39,12 @@ Lint 警告：固定工具链的升级提示、Android 12+ dataExtractionRules �
 
 ## 可逆文件交付
 
-固定四角色均已生成、执行相关验证并重新打开：
+本地验收的固定四角色均已生成、执行相关验证并重新打开；以下目录不包含在公开仓库：
 
-1. `D:/tmp/apk/inkveil-delivery/MODIFIED_FILE.apk`
-2. `D:/tmp/apk/inkveil-delivery/DIFF_FILE.patch`
-3. `D:/tmp/apk/inkveil-delivery/VERIFICATION.txt`
-4. `D:/tmp/apk/inkveil-delivery/ROLLBACK.sh`
+1. `../inkveil-delivery/MODIFIED_FILE.apk`
+2. `../inkveil-delivery/DIFF_FILE.patch`
+3. `../inkveil-delivery/VERIFICATION.txt`
+4. `../inkveil-delivery/ROLLBACK.sh`
 
 它们是原参考 APK 与独立新工程 APK 的文件交付证据，不是对原 APK 就地改名或证明两个 APK 已功能等价。补丁为原生 Git 二进制补丁，在独立副本上精确重建新 APK；不写原 APK。
 
