@@ -44,9 +44,49 @@ jobs:
           dependency-graph: disabled
 
       - name: 确认 Android SDK 固定组件
+        env:
+          COMMANDLINE_TOOLS_URL: https://dl.google.com/android/repository/commandlinetools-linux-15859902_latest.zip
+          COMMANDLINE_TOOLS_SHA256: 4e4c464f145a7512b57d088ac6c278c03c9eea610886b35a5e0804e74eedf583
         run: |
-          test -n "$ANDROID_HOME"
-          sdkmanager --sdk_root="$ANDROID_HOME" "platforms;android-36" "build-tools;36.0.0"
+          sdk_root="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-$RUNNER_TEMP/android-sdk}}"
+          mkdir -p "$sdk_root"
+          sdk_manager="$(command -v sdkmanager || true)"
+          if [ -z "$sdk_manager" ]; then
+            for candidate in "$sdk_root/cmdline-tools/latest/bin/sdkmanager" "$sdk_root/tools/bin/sdkmanager"; do
+              if [ -x "$candidate" ]; then
+                sdk_manager="$candidate"
+                break
+              fi
+            done
+          fi
+          if [ -z "$sdk_manager" ]; then
+            bootstrap="$RUNNER_TEMP/android-commandline-tools"
+            archive="$RUNNER_TEMP/android-commandline-tools.zip"
+            checksum="$RUNNER_TEMP/android-commandline-tools.sha256"
+            curl --fail --location --retry 3 --retry-delay 2 --connect-timeout 30 --max-time 600 \
+              --output "$archive" "$COMMANDLINE_TOOLS_URL"
+            printf '%s  %s\n' "$COMMANDLINE_TOOLS_SHA256" "$archive" > "$checksum"
+            sha256sum --check "$checksum"
+            mkdir -p "$bootstrap"
+            unzip -q "$archive" -d "$bootstrap"
+            sdk_manager="$bootstrap/cmdline-tools/bin/sdkmanager"
+          fi
+          test -x "$sdk_manager"
+          export ANDROID_HOME="$sdk_root"
+          export ANDROID_SDK_ROOT="$sdk_root"
+          export PATH="$(dirname "$sdk_manager"):$PATH"
+          {
+            printf 'ANDROID_HOME=%s\n' "$ANDROID_HOME"
+            printf 'ANDROID_SDK_ROOT=%s\n' "$ANDROID_SDK_ROOT"
+          } >> "$GITHUB_ENV"
+          printf '%s\n' "$(dirname "$sdk_manager")" >> "$GITHUB_PATH"
+          printf 'SDK路径：%s\nSDK Manager：%s\n' "$ANDROID_HOME" "$sdk_manager"
+          licenses_input="$RUNNER_TEMP/android-sdk-license-input.txt"
+          for ((answer = 0; answer < 100; answer++)); do
+            printf 'y\n'
+          done > "$licenses_input"
+          "$sdk_manager" --sdk_root="$ANDROID_HOME" --licenses < "$licenses_input"
+          "$sdk_manager" --sdk_root="$ANDROID_HOME" "platforms;android-36" "build-tools;36.0.0"
           java -version
           sh ./gradlew --version --no-daemon --console=plain
 

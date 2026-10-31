@@ -31,7 +31,7 @@
 | --- | --- |
 | 检出与环境 | Ubuntu 24.04、Temurin JDK 17；官方 Action 固定完整提交 SHA |
 | Gradle | 使用仓库 Wrapper 8.13，保留分发 SHA-256 校验；校验 Wrapper JAR |
-| Android SDK | 通过 Runner 的 `sdkmanager` 确认 `platforms;android-36` 和 `build-tools;36.0.0` |
+| Android SDK | 显式发现或经官方校验自举 `sdkmanager`，安装固定的 `platforms;android-36` 和 `build-tools;36.0.0` |
 | 质量检查 | `:core:test`、`:app:lintDebug`、`:app:assembleDebug` |
 | APK 验证 | Build Tools 36.0.0 的 `apksigner verify` 与 `zipalign -c -p 4` |
 | 可下载产物 | 明确命名的 Debug APK、APK SHA-256、提交及运行信息 |
@@ -43,7 +43,21 @@
 sh ./gradlew :core:test :app:lintDebug :app:assembleDebug --no-daemon --console=plain --stacktrace
 ```
 
-构建采用项目固定的 AGP 8.13.0、compileSdk / targetSdk 36、minSdk 24。SDK 组件沿用 GitHub 托管 Runner 的许可环境安装，不添加会因 `pipefail` 产生退出码 141 的裸 `yes` 管道。
+构建采用项目固定的 AGP 8.13.0、compileSdk / targetSdk 36、minSdk 24。SDK 初始化不假定 `sdkmanager` 已在 Runner 的 `PATH` 中：
+
+1. 先检查 `PATH`，然后检查 SDK 根目录下的 `cmdline-tools/latest/bin/sdkmanager` 与 `tools/bin/sdkmanager`。
+2. 若均不存在，从 Google 官方下载固定的 `commandlinetools-linux-15859902_latest.zip`，严格校验 SHA-256 后才解压至 `RUNNER_TEMP`。文件名虽含 `latest`，版本号、完整 URL 与摘要均已固定。
+3. 显式设置并传递 `ANDROID_HOME`、`ANDROID_SDK_ROOT` 和工具路径；缺少 SDK 根目录时使用 Runner 临时目录。
+4. 以有限的许可证应答文件作为标准输入完成许可确认，再安装固定平台和 Build Tools。不使用会因 `pipefail` 产生退出码 141 的裸 `yes` 管道。
+
+Google 官方下载地址与锁定摘要：
+
+```text
+https://dl.google.com/android/repository/commandlinetools-linux-15859902_latest.zip
+SHA-256: 4e4c464f145a7512b57d088ac6c278c03c9eea610886b35a5e0804e74eedf583
+```
+
+下载、摘要检查、许可确认或安装任何一步失败都会使构建失败，不会跳过 SDK 验证。首次远端运行曾因 `sdkmanager: command not found` 退出 127，上述发现与自举流程针对该实际故障修正；修正配置本身不等于后续远端运行已经成功。
 
 不把 `:core:benchmark` 设为 CI 性能门槛：共享 Runner 的调度、频率和负载噪声不足以证明 Android 真机表现。性能设计与真机验收见 [性能文档](PERFORMANCE_zh.md)。
 
@@ -95,7 +109,7 @@ Action 固定 SHA 和 Wrapper 校验不能证明所有依赖永远安全；升�
 ## 常见失败
 
 - **Wrapper / 依赖下载超时**：查看具体下载地址与失败日志，排除网络问题后重新运行；不要关闭 SHA 校验。
-- **SDK 安装失败**：检查 Runner 环境与 `sdkmanager` 输出，确认固定包名，不把退出前的目录存在视为成功。
+- **SDK 初始化 / 安装失败**：检查发现到的工具路径、Google 下载与摘要校验、许可确认及 `sdkmanager` 输出；不要把已有目录视为成功，也不要关闭摘要检查。
 - **测试或 Lint 失败**：优先下载报告并修复根因，不用 `continue-on-error` 掩盖质量检查。
 - **没有 Artifact**：检查构建、签名、对齐或上传步骤；失败运行不保证有 APK。
 - **已取消 / 超时**：检查是否被更新的提交取代；超过 30 分钟的运行会停止。
